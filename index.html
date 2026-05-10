@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S-Graph </title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsxgraph/distrib/jsxgraph.css" />
+    
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; margin: 0; padding: 0; height: 100vh; background-color: #1e1e1e; color: #e0e0e0; overflow: hidden; }
+        .top-navbar { background-color: #111; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; border-bottom: 1px solid #333; height: 50px; flex-shrink: 0;}
+        .top-navbar .logo { font-size: 20px; font-weight: bold; color: white; }
+        .main-container { display: flex; flex-grow: 1; overflow: hidden; position: relative; } 
+        
+        .function-list { width: 350px; border-right: 1px solid #333; display: flex; flex-direction: column; background-color: #1a1a1a; flex-shrink: 0; transition: 0.3s;}
+        .function-list.locked { opacity: 0.5; pointer-events: none; } 
+        .function-input-container { padding: 10px; flex-grow: 1; overflow-y: auto;}
+        
+        .function-item { display: flex; align-items: center; padding: 10px 12px; margin-bottom: 8px; border-radius: 6px; border: 1px solid #333; background-color: #252526; transition: 0.2s; cursor: pointer;}
+        .function-item.active { border: 1px solid #007acc; background-color: #111;}
+        .function-item .color-swatch { width: 14px; height: 14px; border-radius: 50%; margin-right: 12px; flex-shrink: 0;}
+
+        .function-item .math-field { 
+            flex-grow: 1; font-size: 18px; border: 1px solid #444; background-color: #1a1a1a; 
+            padding: 8px 10px; color: white; border-radius: 4px; min-height: 24px; cursor: text;
+        }
+        .function-item.active .math-field { border-color: #007acc; background-color: #000; box-shadow: inset 0 0 5px rgba(0,122,204,0.3); }
+        .mq-editable-field .mq-cursor { border-left: 2px solid white !important; }
+        
+        .remove-btn { color: #888; cursor: pointer; padding: 4px 8px; font-size: 18px; font-weight: bold; border-radius: 4px; transition: 0.2s; margin-left: 5px;}
+        .remove-btn:hover { color: #f44336; background-color: #3a1c1c;}
+        .add-btn { background-color: #252526; color: #ccc; text-align: center; padding: 10px; margin: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; border: 1px solid #555; transition: 0.2s;}
+        .add-btn:hover { background-color: #333; color: white; border-color: #888;}
+        .kb-toggle-btn { position: absolute; bottom: 15px; left: 15px; z-index: 110; background: #252526; color: #aaa; border: 1px solid #444; border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); transition: 0.2s; }
+        .kb-toggle-btn:hover { background: #333; color: white; }
+        #keyboard-wrapper { position: absolute; bottom: 0; left: 0; width: 100%; z-index: 105; background-color: #111; border-top: 1px solid #333; box-shadow: 0 -4px 15px rgba(0,0,0,0.5); display: none; }
+        .math-keyboard { padding: 10px; display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px;}
+        .math-keyboard.keyboard-abc { grid-template-columns: repeat(11, 1fr); }
+        .math-keyboard button { background-color: #252526; border: 1px solid #333; border-radius: 4px; font-size: 18px; color: white; cursor: pointer; transition: 0.1s; height: 45px !important; padding: 0 !important; display: flex; align-items: center; justify-content: center; }
+        .math-keyboard button:hover { background-color: #3e3e42;}
+        .math-keyboard button.key-blue { color: #007acc; font-weight:bold; }
+        .math-keyboard button.key-control { background-color: #333; font-size: 16px; }
+        .math-keyboard button.key-control:hover { background-color: #444; }
+        .math-keyboard button.key-mode-switch { background-color: #007acc; color: white; border: none; grid-column: -2 / -1; }
+        .math-keyboard button.key-mode-switch:hover { background-color: #0088dd; }
+        .graph-panel { flex-grow: 1; display: flex; flex-direction: column; position: relative; background-color: #1e1e1e; overflow: hidden;}
+        .graph-wrapper { flex-grow: 1; position: relative; display: flex; width: 100%; min-height: 0; }
+        .graph-area { flex-grow: 1; width: 100%; cursor: grab;}
+        .graph-area:active { cursor: grabbing;}
+        
+        .jxgbox { background-color: #1e1e1e !important; }
+        .JXGtext { fill: #ffffff !important; color: #ffffff !important; font-size: 14px !important; font-weight: bold; text-shadow: 1px 1px 3px #000000; }
+        .jxgbox svg g[id*="navigation"] { transform: scale(1.6) !important; transform-origin: 90% 90% !important; cursor: pointer; }
+        .jxgbox svg g[id*="navigation"] text { fill: #007acc !important; font-weight: bold; }
+
+        .mode-switch { position: absolute; top: 15px; left: 15px; z-index: 100; display: flex; background: #252526; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); overflow: hidden; border: 1px solid #444;}
+        .mode-switch button { border: none; padding: 8px 16px; cursor: pointer; background: transparent; font-weight: bold; color: #aaa; font-size: 13px; transition: 0.2s; outline: none;}
+        .mode-switch button:hover { background: #333; color: white;}
+        .mode-switch button.active { background: #007acc; color: white; }
+        #mode-clear-nodes { display: none; background: #d9534f; color: white; border-left: 1px solid #555;}
+        #mode-clear-nodes:hover { background: #c9302c; }
+
+        .result-box { position: absolute; top: 15px; right: 20px; background-color: #1a1a1a; border: 1px solid #444; border-radius: 8px; padding: 15px 30px; box-shadow: 0 6px 16px rgba(0,0,0,0.6); font-size: 24px; color: #28a745; font-weight: bold; z-index: 10; display: none;}
+        .hint-text { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #ffcc00; padding: 8px 20px; border-radius: 20px; font-size: 14px; font-weight: bold; display: none; z-index: 100; pointer-events: none;}
+    </style>
+</head>
+<body>
+
+    <div class="top-navbar">
+        <div class="logo">S-Graph <span style="font-size: 14px; font-weight: normal; color: #888;">| Pure Keyboard Perfect</span></div>
+    </div>
+
+    <div class="main-container">
+        <div class="function-list" id="sidebar">
+            <div class="function-input-container" id="funcList"></div>
+            <div class="add-btn" id="addFuncBtn">+ Thêm hàm số</div>
+        </div>
+
+        <div class="graph-panel">
+            <div class="mode-switch">
+                <button id="mode-pan" class="active">✋ Di chuyển & Sửa Hàm</button>
+                <button id="mode-area">📍 Chọn Các Điểm Phân Vùng</button>
+                <button id="mode-clear-nodes">↺ Bỏ Chọn</button>
+            </div>
+            
+            <div id="hint-msg" class="hint-text">Click nhiều điểm vàng để khép kín vùng cần tính diện tích.</div>
+            <div id="result-box" class="result-box">S = 0</div>
+
+            <div class="graph-wrapper">
+                <div class="graph-area" id="box"></div>
+                <button id="toggle-kb-btn" class="kb-toggle-btn" title="Hiện/Ẩn Bàn Phím"><i class="fas fa-keyboard"></i></button>
+            </div>
+
+            <div id="keyboard-wrapper">
+                <div class="math-keyboard" id="kb-math">
+                    <button data-latex="1">1</button> <button data-latex="2">2</button> <button data-latex="3">3</button>
+                    <button data-latex="+">+</button> <button data-latex="-">-</button>
+                    <button data-latex="x^2" class="key-blue">x<sup>2</sup></button>
+                    <button data-latex="x^a" class="key-blue">x<sup>a</sup></button>
+                    <button data-latex="\sqrt{}" class="key-blue">√</button>
+                    <button data-latex="\pi">π</button> <button data-latex="\sin">sin</button>
+                    
+                    <button data-latex="4">4</button> <button data-latex="5">5</button> <button data-latex="6">6</button>
+                    <button data-latex="\times">×</button> <button data-latex="\div">÷</button>
+                    <button data-latex="| |" class="key-blue">|x|</button>
+                    <button data-latex="x" class="key-blue">x</button> <button data-latex="y" class="key-blue">y</button>
+                    <button data-latex="=">=</button> <button data-latex="\cos">cos</button>
+
+                    <button data-latex="7">7</button> <button data-latex="8">8</button> <button data-latex="9">9</button>
+                    <button data-latex="0">0</button> <button data-latex=".">.</button>
+                    <button data-latex="(">(</button> <button data-latex=")">)</button>
+                    <button data-latex="\ln">ln</button> <button data-latex="\log_{ }">log<sub>a</sub></button>                    <button onclick="$('#kb-math').hide(); $('#kb-abc').css('display', 'grid');" class="key-mode-switch">ABC</button>
+                </div>
+
+                <div class="math-keyboard keyboard-abc" id="kb-abc" style="display: none;">
+                    <button data-latex="a">a</button> <button data-latex="b">b</button> <button data-latex="c">c</button>
+                    <button data-latex="d">d</button> <button data-latex="e">e</button> <button data-latex="f">f</button>
+                    <button data-latex="g">g</button> <button data-latex="h">h</button> <button data-latex="i">i</button>
+                    <button data-latex="j">j</button> <button data-latex="k">k</button>
+                    
+                    <button data-latex="l">l</button> <button data-latex="m">m</button> <button data-latex="n">n</button>
+                    <button data-latex="o">o</button> <button data-latex="p">p</button> <button data-latex="q">q</button>
+                    <button data-latex="r">r</button> <button data-latex="s">s</button> <button data-latex="t">t</button>
+                    <button data-latex="\backspace" class="key-control key-delete"><i class="fas fa-backspace"></i></button>
+                    
+                    <button data-latex="u">u</button> <button data-latex="v">v</button> <button data-latex="w">w</button>
+                    <button data-latex="x" class="key-blue">x</button> <button data-latex="y" class="key-blue">y</button> <button data-latex="z">z</button>
+                    <button data-latex=",">,</button> <button data-latex=":">:</button> <button data-latex=";">;</button>
+                    <button onclick="$('#keyboard-wrapper').slideUp(150);" class="key-control key-enter"><i class="fas fa-arrow-down"></i></button>
+
+                    <button data-latex="(">(</button> <button data-latex=")">)</button> <button data-latex="{">{</button>
+                    <button data-latex="}">}</button> <button data-latex="\theta">\theta</button>
+                    <button data-latex="<"><</button> <button data-latex=">">></button>
+                    <button data-latex="\leftarrow">&lt;</button> <button data-latex="\rightarrow">&gt;</button>
+                    <button onclick="$('#kb-abc').hide(); $('#kb-math').css('display', 'grid');" class="key-mode-switch">123</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsxgraph/distrib/jsxgraphcore.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+
+    <script>
+        var MQ = MathQuill.getInterface(2);
+        
+        JXG.Options.axis.ticks.minorTicks = 4; 
+        JXG.Options.axis.ticks.majorHeight = -1; 
+        JXG.Options.axis.ticks.minorHeight = -1; 
+        JXG.Options.axis.ticks.strokeColor = '#555555'; 
+        JXG.Options.axis.ticks.minorStrokeColor = '#2a2a2a'; 
+        JXG.Options.axis.ticks.insertTicks = false;
+        JXG.Options.axis.ticks.drawZero = false; 
+        JXG.Options.text.useMathJax = false;
+
+        var board = JXG.JSXGraph.initBoard('box', { 
+            boundingbox: [-10, 10, 10, -10],
+            axis: true, 
+            grid: false, 
+            keepaspectratio: true, // Giữ tỷ lệ ô vuông
+            showCopyright: false, 
+            zoom: { wheel: true, needShift: false, pinchHorizontal: false, pinchVertical: false }, 
+            pan: {enabled: true, needShift: false, needTwoFingers: false} 
+        });
+
+        function enforceSquareGrid() {
+            var bb = board.getBoundingBox();
+            var width = bb[2] - bb[0];
+            var targetStep = width / 12; 
+            var mag = Math.pow(10, Math.floor(Math.log10(targetStep)));
+            var norm = targetStep / mag;
+            var step;
+            if (norm < 1.5) step = 1 * mag;
+            else if (norm < 3.5) step = 2 * mag;
+            else if (norm < 7.5) step = 5 * mag;
+            else step = 10 * mag;
+
+            if (board.defaultAxes && board.defaultAxes.x && board.defaultAxes.y) {
+                var tx = board.defaultAxes.x.defaultTicks;
+                var ty = board.defaultAxes.y.defaultTicks;
+                if (tx.getAttribute('ticksDistance') !== step) {
+                    tx.setAttribute({ticksDistance: step});
+                    ty.setAttribute({ticksDistance: step});
+                }
+            }
+        }
+        board.on('boundingbox', enforceSquareGrid);
+        enforceSquareGrid();
+
+        window.addEventListener('resize', function() {
+            var box = document.getElementById('box');
+            if (box && board) {
+                board.resizeContainer(box.clientWidth, box.clientHeight);
+                board.update();
+            }
+        });
+
+        var functionsData = {}; 
+        var functionIdCounter = 0;
+        var activeMathField = null;
+        var isAreaMode = false; 
+        var intersectionPointsUI = []; 
+        var selectedNodes = []; 
+        var areaPolygon = null;
+        var colors = ['#ff4d4d', '#3399ff', '#28a745', '#ff9900', '#cc66ff', '#ff66b3'];
+        function parseLatexToMath(latex) {
+            let expr = latex.trim();
+            expr = expr.replace(/^[yrx]\s*=\s*/, ''); 
+            
+            expr = expr.replace(/\\left\|(.*?)\\right\|/g, 'abs($1)');
+            expr = expr.replace(/\|(.*?)\|/g, 'abs($1)');
+            expr = expr.replace(/\\sqrt\[(.*?)\]\{(.*?)\}/g, 'nthRoot($2, $1)');
+            expr = expr.replace(/\\sqrt\{(.*?)\}/g, 'sqrt($1)');
+            expr = expr.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '(($1)/($2))');
+
+            const fns = ['arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'sin', 'cos', 'tan', 'csc', 'sec', 'cot'];
+            fns.forEach(fn => { expr = expr.replace(new RegExp('\\\\' + fn, 'g'), fn); });
+            
+            expr = expr.replace(/\\ln/g, 'log'); 
+            expr = expr.replace(/\\log_\{?([a-zA-Z0-9.]+)\}?\\left\((.*?)\\right\)/g, 'log($2, $1)'); 
+            expr = expr.replace(/\\log_\{?([a-zA-Z0-9.]+)\}?\((.*?)\)/g, 'log($2, $1)');
+            expr = expr.replace(/\\log_\{?([a-zA-Z0-9.]+)\}?([a-zA-Z0-9]+)/g, 'log($2, $1)'); 
+            expr = expr.replace(/\\log/g, 'log10'); 
+
+            expr = expr.replace(/\\left/g, '').replace(/\\right/g, '');
+            expr = expr.replace(/\\pi/g, 'pi');
+            expr = expr.replace(/\\theta/g, 'theta');
+            expr = expr.replace(/\\cdot/g, '*').replace(/\\times/g, '*').replace(/\\div/g, '/');
+            
+            expr = expr.replace(/\{/g, '(').replace(/\}/g, ')');
+            expr = expr.replace(/(\d+)([a-zA-Z\\])/g, '$1*$2');
+            expr = expr.replace(/\)(?=[a-zA-Z0-9\(])/g, ')*');
+            
+            return expr;
+        }
+        function addFunctionField(defaultLatex = "") {
+            let id = functionIdCounter++;
+            let color = colors[id % colors.length];
+
+            let html = `
+                <div class="function-item" id="item_${id}">
+                    <span class="color-swatch" style="background-color: ${color};"></span>
+                    <span class="math-field" id="mf_${id}"></span>
+                    <span class="remove-btn" id="remove_${id}">×</span>
+                </div>
+            `;
+            $('#funcList').append(html);
+
+            let mfSpan = document.getElementById(`mf_${id}`);
+            let mathField = MQ.MathField(mfSpan, {
+                spaceBehavesLikeTab: true,
+                autoCommands: 'pi theta sqrt nthroot', 
+                autoOperatorNames: 'sin cos tan csc sec cot sinh cosh tanh arcsin arccos arctan log ln abs', 
+                handlers: { edit: function() { updateGraph(id, mathField.latex()); } }
+            });
+
+            functionsData[id] = { 
+                id: id, mathField: mathField, color: color, latex: defaultLatex, 
+                evalFunc: null, jsFunc: null, graph: null, 
+                isPolar: false, isInverse: false, isCircle: false, 
+                circleCenter: [0, 0], circleRadius: 0 
+            };
+
+            $(`#remove_${id}`).on('click', function(e) {
+                e.stopPropagation(); 
+                let funcObj = functionsData[id];
+                if (funcObj) {
+                    if (activeMathField === funcObj.mathField) activeMathField = null;
+                    if (funcObj.graph) board.removeObject(funcObj.graph);
+                    delete functionsData[id];
+                    $(`#item_${id}`).remove();
+                    board.update();
+                    clearAreaMode();
+                }
+            });
+
+            $(`#item_${id}`).on('mousedown', function(e) {
+                if ($(e.target).hasClass('remove-btn')) return; 
+                $('.function-item').removeClass('active');
+                $(this).addClass('active');
+                activeMathField = mathField;
+                setTimeout(() => { if (activeMathField) activeMathField.focus(); }, 50);
+                if (!$('#keyboard-wrapper').is(':visible')) $('#keyboard-wrapper').slideDown(150);
+            });
+
+            if(defaultLatex) {
+                mathField.latex(defaultLatex);
+                updateGraph(id, defaultLatex);
+            } else {
+                setTimeout(() => { mathField.focus(); }, 100);
+            }
+        }
+
+        function updateGraph(id, latex) {
+            let funcObj = functionsData[id];
+            if (!funcObj) return;
+            funcObj.latex = latex;
+            
+            try {
+                let mathStr = parseLatexToMath(latex);
+                if (!mathStr || mathStr.trim() === "") throw "Empty";
+                
+                let isPolar = /^r\s*=/.test(latex.trim());
+                let isInverse = /^x\s*=/.test(latex.trim());
+                let isCircle = false;
+                
+                let normLatex = latex.replace(/\\left/g, '').replace(/\\right/g, '').replace(/\s+/g, '');
+                let circleMatch = normLatex.match(/^(?:x|\(x([+-][\d.]+)\))\^\{?2\}?\+(?:y|\(y([+-][\d.]+)\))\^\{?2\}?=(.+)$/);
+                
+                if (funcObj.graph && (funcObj.isPolar !== isPolar || funcObj.isInverse !== isInverse || funcObj.isCircle !== isCircle || isCircle)) {
+                    board.removeObject(funcObj.graph);
+                    funcObj.graph = null;
+                }
+
+                if (circleMatch && !isPolar && !isInverse) {
+                    isCircle = true;
+                    let cx = parseFloat(circleMatch[1] || 0) * -1;
+                    let cy = parseFloat(circleMatch[2] || 0) * -1;
+                    
+                    let rhsStr = circleMatch[3];
+                    let rhsMath = parseLatexToMath(rhsStr);
+                    let rhsValue = math.compile(rhsMath).evaluate();
+                    let radius = Math.sqrt(rhsValue);
+                    
+                    if (!funcObj.graph) {
+                        funcObj.graph = board.create('circle', [[cx, cy], radius], { 
+                            strokeColor: funcObj.color, strokeWidth: 2, highlight: false, fixed: true
+                        });
+                    }
+                    funcObj.isCircle = true; funcObj.isPolar = false; funcObj.isInverse = false;
+                    funcObj.circleCenter = [cx, cy]; funcObj.circleRadius = radius;
+                    funcObj.evalFunc = null; funcObj.jsFunc = null;
+                } 
+                else {
+                    funcObj.evalFunc = math.compile(mathStr); 
+                    funcObj.isCircle = false;
+                    funcObj.isPolar = isPolar;
+                    funcObj.isInverse = isInverse;
+                    let scope = isPolar ? {theta: 0} : (isInverse ? {y: 0} : {x: 0});
+
+                    if (!funcObj.graph) {
+                        funcObj.jsFunc = function(val) { 
+                            if (!funcObj.evalFunc) return NaN;
+                            if (isPolar) scope.theta = val; else if (isInverse) scope.y = val; else scope.x = val;
+                            try {
+                                let valObj = funcObj.evalFunc.evaluate(scope);
+                                return (valObj && valObj.isComplex) ? NaN : valObj;
+                            } catch(e) { return NaN; }
+                        };
+
+                        if (isPolar) {
+                            funcObj.graph = board.create('curve', [
+                                function(t) { return funcObj.jsFunc(t) * Math.cos(t); },
+                                function(t) { return funcObj.jsFunc(t) * Math.sin(t); },
+                                0, 2 * Math.PI 
+                            ], { strokeColor: funcObj.color, strokeWidth: 2, highlight: false, numberPointsHigh: 4000 });
+                        } else if (isInverse) {
+                            funcObj.graph = board.create('curve', [
+                                function(t) { return funcObj.jsFunc(t); },
+                                function(t) { return t; }
+                            ], { strokeColor: funcObj.color, strokeWidth: 2, highlight: false, numberPointsHigh: 4000 });
+                        } else {
+                            funcObj.graph = board.create('functiongraph', [funcObj.jsFunc], {
+                                strokeColor: funcObj.color, strokeWidth: 2, highlight: false, numberPointsHigh: 4000 
+                            });
+                        }
+                    }
+                }
+                board.update();
+            } catch (e) {
+                funcObj.evalFunc = null;
+                if (funcObj.graph) { board.removeObject(funcObj.graph); funcObj.graph = null; }
+                board.update();
+            }
+        }
+
+        $(document).ready(function() {
+            $('#toggle-kb-btn').on('click', function() { $('#keyboard-wrapper').slideToggle(150); });
+            $('#addFuncBtn').on('click', function() {
+                if (isAreaMode) { alert("Vui lòng chuyển sang chế độ 'Di chuyển' để thêm hàm mới."); return; }
+                addFunctionField("");
+                setTimeout(() => { let container = $('#funcList'); container.scrollTop(container[0].scrollHeight); }, 50);
+            });
+
+
+            $('.math-keyboard button[data-latex]')
+                .on('mousedown', function(e) { e.preventDefault(); })
+                .on('click', function() {
+                    var latex = $(this).attr('data-latex');
+                    if (!activeMathField || !latex) return;
+                    
+                    if (latex === '\\leftarrow') { activeMathField.keystroke('Left'); } 
+                    else if (latex === '\\rightarrow') { activeMathField.keystroke('Right'); } 
+                    else if (latex === '\\backspace') { activeMathField.keystroke('Backspace'); }
+                    else if (latex === '| |') { activeMathField.write('|'); }
+                    else { 
+                        activeMathField.write(latex); 
+                        if (latex === '\\log_{ }') activeMathField.keystroke('Left'); 
+                    }
+                    activeMathField.focus();
+                });
+
+            addFunctionField("");
+        });
+
+        $('#mode-pan').click(function() {
+            isAreaMode = false;
+            $(this).addClass('active'); $('#mode-area').removeClass('active');
+            board.attr.pan.enabled = true; $('#box').css('cursor', 'grab');
+            $('#sidebar').removeClass('locked');
+            $('#hint-msg').hide(); $('#mode-clear-nodes').hide();
+            clearAreaMode();
+        });
+
+        $('#mode-area').click(function() {
+            isAreaMode = true;
+            $(this).addClass('active'); $('#mode-pan').removeClass('active');
+            board.attr.pan.enabled = false; $('#box').css('cursor', 'default');
+            $('#sidebar').addClass('locked'); 
+            $('#keyboard-wrapper').slideUp(150); 
+            $('#hint-msg').fadeIn(); $('#mode-clear-nodes').show();
+            generateAndShowNodes(); 
+        });
+
+        $('#mode-clear-nodes').click(function() {
+            selectedNodes.forEach(n => n.setAttribute({fillColor: '#ffcc00', size: 5}));
+            selectedNodes = [];
+            if (areaPolygon) { board.removeObject(areaPolygon); areaPolygon = null; }
+            $('#result-box').hide();
+        });
+
+        function clearAreaMode() {
+            if (areaPolygon) { board.removeObject(areaPolygon); areaPolygon = null; }
+            intersectionPointsUI.forEach(p => board.removeObject(p));
+            intersectionPointsUI = [];
+            selectedNodes = [];
+            $('#result-box').hide();
+        }
+
+        function getEvaluableFunctions() {
+            let fns = Object.values(functionsData).filter(f => f.evalFunc && !f.isPolar && !f.isInverse && !f.isCircle).map(f => f.jsFunc);
+            let circles = Object.values(functionsData).filter(f => f.isCircle);
+            circles.forEach(c => {
+                let cx = c.circleCenter[0], cy = c.circleCenter[1], R = c.circleRadius, R2 = R * R;
+                fns.push(x => { 
+                    let dx2 = (x-cx)*(x-cx); 
+                    if (dx2 > R2 && dx2 < R2 + 0.1) dx2 = R2; // Chống lỗi sai số dấu phẩy động
+                    return (dx2 > R2) ? NaN : cy + Math.sqrt(R2 - dx2); 
+                });
+                fns.push(x => { 
+                    let dx2 = (x-cx)*(x-cx); 
+                    if (dx2 > R2 && dx2 < R2 + 0.1) dx2 = R2; 
+                    return (dx2 > R2) ? NaN : cy - Math.sqrt(R2 - dx2); 
+                });
+            });
+            fns.push(x => 0); 
+            return fns;
+        }
+
+        function safeEval(f, x) {
+            let y = f(x);
+            if (!isNaN(y) && isFinite(y)) return y;
+            let epsilons = [1e-5, -1e-5, 1e-4, -1e-4, 1e-3, -1e-3, 0.01, -0.01];
+            for (let eps of epsilons) {
+                y = f(x + eps);
+                if (!isNaN(y) && isFinite(y)) return y;
+            }
+            return NaN;
+        }
+
+        function generateAndShowNodes() {
+            clearAreaMode();
+            
+            let cartFns = Object.values(functionsData).filter(f => f.evalFunc && !f.isPolar && !f.isInverse && !f.isCircle).map(f => f.jsFunc);
+            let invFns = Object.values(functionsData).filter(f => f.evalFunc && f.isInverse).map(f => f.jsFunc);
+            let polarFns = Object.values(functionsData).filter(f => f.evalFunc && f.isPolar).map(f => f.jsFunc);
+            let circles = Object.values(functionsData).filter(f => f.isCircle);
+            
+            circles.forEach(c => {
+                let cx = c.circleCenter[0], cy = c.circleCenter[1], R = c.circleRadius, R2 = R * R;
+                cartFns.push(x => { let dx2 = (x-cx)*(x-cx); return (dx2>R2+1e-9)?NaN:cy+Math.sqrt(Math.max(0,R2-dx2)); });
+                cartFns.push(x => { let dx2 = (x-cx)*(x-cx); return (dx2>R2+1e-9)?NaN:cy-Math.sqrt(Math.max(0,R2-dx2)); });
+            });
+
+            let oxAxis = x => 0;
+            let oyAxis = y => 0; 
+            cartFns.push(oxAxis);
+
+            let bbox = board.getBoundingBox();
+            let minX = bbox[0], maxX = bbox[2], minY = bbox[3], maxY = bbox[1];
+            let steps = 2000;
+            let dx = (maxX - minX) / steps;
+            let dy = (maxY - minY) / steps;
+            let rawIntersections = [];
+            for (let i = 0; i < cartFns.length; i++) {
+                for (let j = i + 1; j < cartFns.length; j++) {
+                    let f = cartFns[i], g = cartFns[j];
+                    let prevDiff = f(minX) - g(minX);
+                    for (let k = 1; k <= steps; k++) {
+                        let x2 = minX + k * dx, x1 = x2 - dx, currDiff = f(x2) - g(x2);
+                        let hasRoot = (!isNaN(prevDiff) && !isNaN(currDiff) && prevDiff * currDiff <= 0) || (isNaN(prevDiff) !== isNaN(currDiff));
+                        if (hasRoot) {
+                            let L = x1, R = x2, yL = prevDiff, isLNaN = isNaN(yL);
+                            for(let step = 0; step < 40; step++) {
+                                let mid = (L + R) / 2, yMid = f(mid) - g(mid);
+                                if (isNaN(yMid)) { if (isLNaN) L = mid; else R = mid; } 
+                                else { if (isLNaN) R = mid; else { if (yL * yMid <= 0) R = mid; else { L = mid; yL = yMid; } } }
+                            }
+                            let rootX = (L + R) / 2, yF = f(rootX), yG = g(rootX);
+                            if (!isNaN(yF) && !isNaN(yG) && Math.abs(yF - yG) < 0.1) {
+                                let finalY = (yF + yG) / 2;
+                                rawIntersections.push({x: rootX, y: finalY});
+                                rawIntersections.push({x: rootX, y: 0}); 
+                            }
+                        }
+                        prevDiff = currDiff;
+                    }
+                }
+            }
+            for (let pFn of invFns) {
+                for (let k = 1; k < steps; k++) {
+                    let y0 = minY + (k-1)*dy, y1 = minY + k*dy, y2 = minY + (k+1)*dy;
+                    let x0 = pFn(y0), x1 = pFn(y1), x2 = pFn(y2);
+                    if (!isNaN(x0) && !isNaN(x1) && !isNaN(x2)) {
+                        let d1 = x1 - x0, d2 = x2 - x1;
+                        if (d1 * d2 < 0) {
+                            let L = y0, R = y2, isMax = d1 > 0;
+                            for(let step = 0; step < 30; step++) {
+                                let m1 = L + (R-L)/3, m2 = R - (R-L)/3;
+                                if (isMax) { if (pFn(m1) < pFn(m2)) L=m1; else R=m2; } else { if (pFn(m1) > pFn(m2)) L=m1; else R=m2; }
+                            }
+                            let peakY = (L+R)/2, peakX = pFn(peakY);
+                            rawIntersections.push({x: peakX, y: peakY});
+                            rawIntersections.push({x: peakX, y: 0});
+                            rawIntersections.push({x: 0, y: peakY});
+                        }
+                    }
+                }
+                for (let cFn of cartFns) {
+                    let prevYVal = minY;
+                    let prevDiff = prevYVal - cFn(pFn(prevYVal));
+                    
+                    for (let k = 1; k <= steps; k++) {
+                        let currYVal = minY + k * dy;
+                        let yPrev1Val = currYVal - dy;
+                        let currDiff = currYVal - cFn(pFn(currYVal));
+
+                        if (!isNaN(prevDiff) && !isNaN(currDiff) && prevDiff * currDiff <= 0) {
+                            let Ly = yPrev1Val, Ry = currYVal, yLy = prevDiff;
+                            for (let step = 0; step < 30; step++) {
+                                let my = (Ly + Ry) / 2;
+                                let yMy = my - cFn(pFn(my));
+                                if (isNaN(yMy)) Ry = my;
+                                else if (yLy * yMy <= 0) Ry = my;
+                                else { Ly = my; yLy = yMy; }
+                            }
+                            let finalY = (Ly + Ry) / 2, finalX = pFn(finalY);
+                            if (!isNaN(finalX) && !isNaN(finalY) && isFinite(finalX) && isFinite(finalY)) {
+                                rawIntersections.push({x: finalX, y: finalY});
+                                rawIntersections.push({x: finalX, y: 0});
+                                rawIntersections.push({x: 0, y: finalY});
+                            }
+                        }
+                        prevDiff = currDiff;
+                    }
+                }
+            }
+            for (let i = 0; i < cartFns.length - 1; i++) { 
+                let f = cartFns[i];
+                for (let k = 1; k < steps; k++) {
+                    let x0 = minX + (k-1)*dx, x1 = minX + k*dx, x2 = minX + (k+1)*dx;
+                    let y0 = f(x0), y1 = f(x1), y2 = f(x2);
+                    if (!isNaN(y0) && !isNaN(y1) && !isNaN(y2)) {
+                        let d1 = y1-y0, d2 = y2-y1;
+                        if (d1 * d2 < 0) {
+                            let L = x0, R = x2, isMax = d1>0;
+                            for(let step = 0; step < 30; step++) {
+                                let m1 = L+(R-L)/3, m2 = R-(R-L)/3;
+                                if (isMax) { if (f(m1) < f(m2)) L=m1; else R=m2; } else { if (f(m1) > f(m2)) L=m1; else R=m2; }
+                            }
+                            let peakX = (L+R)/2, peakY = f(peakX);
+                            if (!isNaN(peakY) && isFinite(peakY) && Math.abs(peakY) < 10000) {
+                                rawIntersections.push({x: peakX, y: peakY}); 
+                                rawIntersections.push({x: peakX, y: 0});     
+                            }
+                        }
+                    }
+                }
+            }
+
+            let minX_int = Math.ceil(minX), maxX_int = Math.floor(maxX);
+            let minY_int = Math.ceil(minY), maxY_int = Math.floor(maxY);
+            
+            for (let x = minX_int; x <= maxX_int; x++) {
+                for (let f of cartFns) {
+                    let y = f(x);
+                    if (!isNaN(y) && isFinite(y) && Math.abs(y - Math.round(y)) < 1e-7) {
+                        let intY = Math.round(y);
+                        rawIntersections.push({x: x, y: intY});     
+                        rawIntersections.push({x: x, y: 0});        
+                        rawIntersections.push({x: 0, y: intY});     
+                    }
+                }
+            }
+            for (let y = minY_int; y <= maxY_int; y++) {
+                for (let invF of invFns) {
+                    let x = invF(y);
+                    if (!isNaN(x) && isFinite(x) && Math.abs(x - Math.round(x)) < 1e-7) {
+                        let intX = Math.round(x);
+                        rawIntersections.push({x: intX, y: y});     
+                        rawIntersections.push({x: intX, y: 0});        
+                        rawIntersections.push({x: 0, y: y});     
+                    }
+                }
+            }
+            circles.forEach(c => {
+                let cx = c.circleCenter[0], cy = c.circleCenter[1], R = c.circleRadius;
+                rawIntersections.push({x: cx, y: cy + R}); rawIntersections.push({x: cx, y: cy - R});
+                rawIntersections.push({x: cx - R, y: cy}); rawIntersections.push({x: cx + R, y: cy});
+            });
+            for (let pFn of polarFns) {
+                for (let cFn of cartFns) {
+                    let pX = pFn(0) * Math.cos(0), pY = pFn(0) * Math.sin(0);
+                    let prevDiff = pY - cFn(pX);
+                    for (let k = 1; k <= steps; k++) {
+                        let t = k * (2 * Math.PI / steps), r = pFn(t);
+                        let cX = r * Math.cos(t), cY = r * Math.sin(t);
+                        let currDiff = cY - cFn(cX);
+                        if (!isNaN(prevDiff) && !isNaN(currDiff) && prevDiff * currDiff <= 0) {
+                            let ptRoot = ((k-1)*dTheta * Math.abs(currDiff) + theta * Math.abs(prevDiff)) / (Math.abs(prevDiff) + Math.abs(currDiff));
+                            let rRoot = pFn(tRoot);
+                            rawIntersections.push({x: rRoot*Math.cos(tRoot), y: rRoot*Math.sin(tRoot)});
+                            rawIntersections.push({x: rRoot*Math.cos(tRoot), y: 0});
+                        }
+                        prevDiff = currDiff;
+                    }
+                }
+            }
+            let uniquePts = [];
+            let threshold = dx * 3; 
+            if (threshold < 0.05) threshold = 0.05;
+
+            rawIntersections.forEach(p => {
+                let cleanX = Math.abs(p.x) < 1e-5 ? 0 : p.x;
+                let cleanY = Math.abs(p.y) < 1e-5 ? 0 : p.y;
+                let isDup = uniquePts.some(up => Math.abs(up.x - cleanX) < threshold && Math.abs(up.y - cleanY) < threshold);
+                if (!isDup && cleanX >= minX && cleanX <= maxX) { uniquePts.push({x: cleanX, y: cleanY}); }
+            });
+            uniquePts.forEach(p => {
+                let ptUI = board.create('point', [p.x, p.y], {
+                    name: '', size: 4, fillColor: '#ffcc00', strokeColor: '#1e1e1e', strokeWidth: 1,
+                    highlightFillColor: '#28a745', highlightStrokeColor: '#fff', fixed: true, cursor: 'pointer'
+                });
+                ptUI.on('down', function() { handleNodeClick(this); });
+                intersectionPointsUI.push(ptUI);
+            });
+        }
+        function handleNodeClick(node) {
+            let idx = selectedNodes.indexOf(node);
+            if (idx > -1) {
+                selectedNodes.splice(idx, 1); node.setAttribute({fillColor: '#ffcc00', size: 4});
+            } else {
+                selectedNodes.push(node); node.setAttribute({fillColor: '#28a745', size: 6});
+            }
+
+            if (selectedNodes.length <= 1) {
+                if (areaPolygon) board.removeObject(areaPolygon); $('#result-box').hide();
+            } else if (selectedNodes.length === 2) {
+                calculateAreaBetween2Nodes(selectedNodes[0], selectedNodes[1]);
+            } else {
+                calculateAreaPolygon(selectedNodes); 
+            }
+        }
+
+        function calculateAreaBetween2Nodes(node1, node2) {
+            let xL = Math.min(node1.X(), node2.X()), xR = Math.max(node1.X(), node2.X());
+            if (Math.abs(xR - xL) < 0.01) return; 
+
+            let fns = Object.values(functionsData).filter(f => f.evalFunc && !f.isPolar && !f.isInverse).map(f => f.jsFunc); 
+            fns.push(x => 0); 
+            
+            let xMid = (xL + xR) / 2 + 0.001; 
+            let yTarget = node1.Y() + (node2.Y() - node1.Y()) * ((xMid - node1.X()) / (node2.X() - node1.X()));
+            let candidates = fns.map(f => ({ fn: f, y: f(xMid) })).filter(c => !isNaN(c.y) && isFinite(c.y));
+            
+            candidates.sort((a,b) => Math.abs(a.y - yTarget) - Math.abs(b.y - yTarget));
+            if(candidates.length < 2) return;
+            drawAndCalculateArea(xL, xR, candidates[1].fn, candidates[0].fn);
+        }
+
+        function calculateAreaPolygon(nodes) {
+            let N = nodes.length;
+            let cx = 0, cy = 0; nodes.forEach(n => { cx += n.X(); cy += n.Y(); }); cx /= N; cy /= N;
+            let sortedNodes = [...nodes].sort((a, b) => Math.atan2(a.Y() - cy, a.X() - cx) - Math.atan2(b.Y() - cy, b.X() - cx));
+            
+            let fns = Object.values(functionsData).filter(f => f.evalFunc && !f.isPolar && !f.isInverse).map(f => f.jsFunc); 
+            fns.push(x => 0); 
+            let totalArea = 0; let poly_points = [];
+
+            for (let i = 0; i < N; i++) {
+                let pA = { x: sortedNodes[i].X(), y: sortedNodes[i].Y() }, pB = { x: sortedNodes[(i+1)%N].X(), y: sortedNodes[(i+1)%N].Y() };
+                if (Math.abs(pA.x - pB.x) < 0.01) { poly_points.push([pA.x, pA.y]); poly_points.push([pB.x, pB.y]); continue; }
+
+                let bestFunc = null, minError = Infinity;
+                for (let f of fns) {
+                    let errA = Math.abs(f(pA.x) - pA.y), errB = Math.abs(f(pB.x) - pB.y), errMid = Math.abs(f((pA.x + pB.x)/2) - (pA.y + pB.y)/2);
+                    if (errA < 0.05 && errB < 0.05) { 
+                        let totalErr = errA + errB + errMid;
+                        if (totalErr < minError) { minError = totalErr; bestFunc = f; }
+                    }
+                }
+                if (!bestFunc || minError > 0.5) {
+                    let m = (pB.y - pA.y) / (pB.x - pA.x), c = pA.y - m * pA.x; bestFunc = x => m * x + c;
+                }
+
+                let intSteps = 1000;
+                let h = (pB.x - pA.x) / intSteps;
+                let getVal = (x) => { let y = bestFunc(x); return isNaN(y) ? 0 : y; };
+                let sum = getVal(pA.x) + getVal(pB.x);
+                for (let k = 1; k < intSteps; k++) sum += (k % 2 === 0 ? 2 : 4) * getVal(pA.x + k * h);
+                totalArea += (h / 3) * sum; 
+
+                let drawSteps = 60, dx = (pB.x - pA.x) / drawSteps;
+                for (let k = 0; k <= drawSteps; k++) poly_points.push([pA.x + k * dx, getVal(pA.x + k * dx)]);
+            }
+
+            if (areaPolygon) board.removeObject(areaPolygon);
+            areaPolygon = board.create('polygon', poly_points, { fillColor: '#007acc', fillOpacity: 0.6, borders: {strokeWidth: 0}, vertices: {visible: false} });
+            $('#result-box').html(`S ≈ ${parseFloat(Math.abs(totalArea).toFixed(10))}`).show();
+        }
+
+        function drawAndCalculateArea(xL, xR, fUp, fDown) {
+            let poly_points = [], p_up = [], p_down = [];
+            let drawSteps = 100, drawDx = (xR - xL) / drawSteps;
+            for (let i = 0; i <= drawSteps; i++) {
+                let x = xL + i * drawDx, y1 = fUp(x), y2 = fDown(x);
+                if (isNaN(y1)) y1 = 0; if (isNaN(y2)) y2 = 0;
+                p_up.push([x, Math.max(y1, y2)]); p_down.push([x, Math.min(y1, y2)]);
+            }
+
+            let intSteps = 1000; 
+            let h = (xR - xL) / intSteps;
+            let getDiff = (x) => { let y1 = fUp(x), y2 = fDown(x); if (isNaN(y1)) y1 = 0; if (isNaN(y2)) y2 = 0; return Math.abs(y1 - y2); };
+            
+            let areaSum = getDiff(xL) + getDiff(xR);
+            for (let i = 1; i < intSteps; i++) areaSum += (i % 2 === 0 ? 2 : 4) * getDiff(xL + i * h);
+            let area = (h / 3) * areaSum;
+
+            poly_points = p_up.concat(p_down.reverse());
+            if (areaPolygon) board.removeObject(areaPolygon);
+            areaPolygon = board.create('polygon', poly_points, { fillColor: '#007acc', fillOpacity: 0.6, borders: {strokeWidth: 0}, vertices: {visible: false} });
+            $('#result-box').html(`S = ${parseFloat(area.toFixed(10))}`).show();
+        }
+    </script>
+</body>
+</html>
