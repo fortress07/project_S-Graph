@@ -1,0 +1,21 @@
+{
+  "name": "s-graph",
+  "version": "2.0.0",
+  "description": "Vẽ đồ thị hàm số và tính diện tích hình phẳng bằng cách chọn điểm trên đồ thị",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "node tests/run.js"
+  },
+  "keywords": [
+    "graphing-calculator",
+    "math",
+    "integral",
+    "area",
+    "latex",
+    "canvas",
+    "education"
+  ],
+  "license": "MIT"
+}

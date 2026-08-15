@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>S-Graph — kiểm thử giao diện</title>
+<style>
+  body { margin: 0; font: 13px/1.6 ui-monospace, Consolas, monospace; background: #0b0e14; color: #e7eaf0; }
+  #report { padding: 18px 22px; }
+  h1 { font-size: 15px; margin: 0 0 14px; }
+  .case { padding: 3px 0; }
+  .pass::before { content: '✓ '; color: #22c58b; }
+  .fail::before { content: '✗ '; color: #f2555a; }
+  .fail { color: #f2555a; }
+  #summary { margin-top: 16px; padding-top: 12px; border-top: 1px solid #262c3a; font-weight: 700; }
+  iframe { position: fixed; right: 0; bottom: 0; width: 1000px; height: 700px; border: 0; opacity: 0.001; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="report"><h1>S-Graph — kiểm thử giao diện trên trình duyệt</h1></div>
+<iframe id="frame" src="../index.html"></iframe>
+
+<script type="module">
+const report = document.getElementById('report');
+const results = [];
+
+function check(name, condition, detail = '') {
+  const ok = Boolean(condition);
+  results.push(ok);
+  const line = document.createElement('div');
+  line.className = 'case ' + (ok ? 'pass' : 'fail');
+  line.textContent = name + (ok || !detail ? '' : ` — ${detail}`);
+  report.append(line);
+}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Bấm chuột thật lên canvas tại toạ độ toán học (x, y). */
+function clickAt(frame, app, x, y) {
+  const canvas = frame.document.getElementById('graph-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const sx = app.graph.view.screenX(x);
+  const sy = app.graph.view.screenY(y);
+  const base = {
+    bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse',
+    clientX: rect.left + sx, clientY: rect.top + sy,
+  };
+  canvas.dispatchEvent(new frame.PointerEvent('pointerdown', base));
+  canvas.dispatchEvent(new frame.PointerEvent('pointerup', base));
+}
+
+async function run() {
+  const frame = document.getElementById('frame').contentWindow;
+
+  for (let i = 0; i < 80 && !frame.sGraph; i++) await wait(100);
+  const app = frame.sGraph;
+  check('Ứng dụng khởi động được', Boolean(app));
+  if (!app) return finish();
+
+  /* --- Kết xuất --- */
+  const canvas = frame.document.getElementById('graph-canvas');
+  check('Canvas có kích thước hợp lệ', canvas.width > 0 && canvas.height > 0,
+        `${canvas.width}×${canvas.height}`);
+  check('MathQuill nạp được', Boolean(frame.MathQuill));
+
+  await wait(400);   // chờ khung hình đầu tiên được vẽ
+  const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  let painted = 0;
+  for (let i = 0; i < pixels.length; i += 4000) if (pixels[i + 3] > 0) painted++;
+  check('Đồ thị có vẽ ra điểm ảnh', painted > 0);
+
+  /* --- Nhập hàm số --- */
+  app.items.length = 0;
+  app.sidebar.rows.forEach((row) => row.element.remove());
+  app.sidebar.rows.clear();
+  app._addItem('y=x^2', { silent: true });
+  app._addItem('y=x', { silent: true });
+  app._refreshScene();
+  await wait(120);
+
+  check('Hai hàm số dựng được đường cong',
+        app.visibleCurves().length === 2, `nhận ${app.visibleCurves().length}`);
+  check('Danh sách bên trái hiện đủ dòng',
+        frame.document.querySelectorAll('.function-row').length === 2);
+
+  /* --- Chế độ chọn vùng --- */
+  app._setSelectMode(true);
+  await wait(350);
+
+  check('Sinh ra điểm để chọn', app.nodes.length > 0, `${app.nodes.length} điểm`);
+  check('Số điểm ở mức hợp lý (không rối)', app.nodes.length < 40, `${app.nodes.length} điểm`);
+
+  const hasOrigin = app.nodes.some((p) => Math.abs(p.x) < 1e-6 && Math.abs(p.y) < 1e-6);
+  const hasOne = app.nodes.some((p) => Math.abs(p.x - 1) < 1e-6 && Math.abs(p.y - 1) < 1e-6);
+  check('Có giao điểm (0, 0)', hasOrigin);
+  check('Có giao điểm (1, 1)', hasOne);
+
+  /* --- Bấm chọn hai điểm bằng sự kiện chuột thật --- */
+  clickAt(frame, app, 0, 0);
+  await wait(60);
+  clickAt(frame, app, 1, 1);
+  await wait(160);
+
+  check('Bấm chuột chọn được 2 điểm', app.selected.length === 2, `nhận ${app.selected.length}`);
+
+  const resultText = frame.document.getElementById('result-panel').textContent;
+  check('Bảng kết quả hiện diện tích', /0\.1666667/.test(resultText), resultText.slice(0, 80));
+  check('Bảng kết quả hiện dạng phân số 1/6', /1\/6/.test(resultText));
+  check('Bảng kết quả liệt kê đường biên', /Đường biên/.test(resultText));
+  check('Vùng được tô trên đồ thị', Array.isArray(app.graph.region) && app.graph.region.length > 3);
+
+  /* --- Kéo để di chuyển vẫn hoạt động trong chế độ chọn --- */
+  const beforeX = app.graph.view.centerX;
+  const rect = canvas.getBoundingClientRect();
+  const drag = (type, dx) => canvas.dispatchEvent(new frame.PointerEvent(type, {
+    bubbles: true, cancelable: true, pointerId: 2, pointerType: 'mouse',
+    clientX: rect.left + 500 + dx, clientY: rect.top + 300,
+  }));
+  drag('pointerdown', 0); drag('pointermove', -60); drag('pointerup', -60);
+  await wait(60);
+  check('Vẫn kéo được đồ thị khi đang chọn vùng', Math.abs(app.graph.view.centerX - beforeX) > 0.1);
+
+  /* --- Bỏ chọn --- */
+  frame.document.getElementById('clear-selection').click();
+  await wait(80);
+  check('Nút Bỏ chọn xoá hết lựa chọn', app.selected.length === 0 && app.graph.region === null);
+
+  /* --- Đổi giao diện sáng/tối --- */
+  frame.document.getElementById('toggle-theme').click();
+  await wait(120);
+  check('Đổi được sang giao diện sáng',
+        frame.document.documentElement.dataset.theme === 'light');
+  check('Canvas đổi màu nền theo giao diện',
+        app.graph.renderer.palette.background.toLowerCase().includes('fff'),
+        app.graph.renderer.palette.background);
+  frame.document.getElementById('toggle-theme').click();
+  await wait(80);
+
+  /* --- Báo lỗi cú pháp --- */
+  app._addItem('y=\\sin', { silent: true });
+  await wait(60);
+  const errored = app.items.find((i) => i.latex === 'y=\\sin');
+  check('Biểu thức sai cú pháp có thông báo lỗi', Boolean(errored?.error), errored?.error ?? '(không có)');
+
+  /* --- Bàn phím ảo --- */
+  frame.document.getElementById('toggle-keyboard').click();
+  await wait(120);
+  check('Mở được bàn phím toán học',
+        frame.document.body.classList.contains('keyboard-open'));
+  check('Bàn phím có đủ phím', frame.document.querySelectorAll('.keyboard-key').length > 20);
+
+  /* --- Hộp thoại hướng dẫn --- */
+  frame.document.getElementById('open-help').click();
+  await wait(80);
+  check('Mở được hộp thoại hướng dẫn', frame.document.getElementById('help-dialog').open);
+
+  finish();
+}
+
+function finish() {
+  const passed = results.filter(Boolean).length;
+  const summary = document.createElement('div');
+  summary.id = 'summary';
+  summary.textContent = `${passed}/${results.length} phép thử đạt`;
+  summary.style.color = passed === results.length ? '#22c58b' : '#f2555a';
+  report.append(summary);
+  window.__UI_TEST_DONE__ = true;
+}
+
+run().catch((error) => {
+  check('Kiểm thử chạy trọn vẹn', false, error.message);
+  console.error(error);
+  finish();
+});
+</script>
+</body>
+</html>
