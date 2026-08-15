@@ -1,0 +1,18 @@
+# Phụ thuộc
+node_modules/
+
+# Kết quả dựng và tệp tạm
+dist/
+*.log
+.cache/
+
+# Hệ điều hành
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Trình soạn thảo
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
