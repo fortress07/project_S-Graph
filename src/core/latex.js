@@ -39,6 +39,87 @@ const NAMED_FUNCTIONS = new Set([
   'min', 'max', 'gcd', 'lcm', 'mod',
 ]);
 
+/** Lệnh cấu trúc mà bộ chuyển đổi hiểu được. */
+const STRUCTURAL = [
+  'frac', 'dfrac', 'tfrac', 'sqrt', 'left', 'right',
+  'lfloor', 'rfloor', 'lceil', 'rceil', 'log', 'circ', 'binom',
+  'operatorname', 'mathrm', 'mathit',
+];
+
+/**
+ * Toàn bộ lệnh LaTeX được chấp nhận từ nguồn *không tin cậy*.
+ *
+ * Cố ý **không** có `\text`: MathQuill 0.10.1 chèn thẳng nội dung của `\text{}`
+ * vào DOM mà không thoát ký tự, nên `\text{<img onerror=...>}` chạy được mã tuỳ
+ * ý. Việc vẽ đồ thị không cần tới lệnh này.
+ */
+export const ALLOWED_COMMANDS = new Set([
+  ...STRUCTURAL,
+  ...NAMED_FUNCTIONS,
+  ...Object.keys(DIRECT),
+  ...SPACING,
+]);
+
+/** Lệnh mà nội dung được lấy nguyên văn, phải lọc sạch trước khi dựng lại. */
+const VERBATIM_COMMANDS = new Set(['operatorname', 'mathrm', 'mathit']);
+
+/**
+ * Lọc chuỗi LaTeX đến từ nguồn không tin cậy (liên kết chia sẻ, localStorage).
+ *
+ * Chuỗi này sẽ được MathQuill dựng thành DOM, nên đây chính là ranh giới tin
+ * cậy. Cách làm: chỉ giữ lại lệnh nằm trong danh sách cho phép, và với những
+ * lệnh nhận nội dung nguyên văn thì chỉ chừa lại chữ, số và dấu cách. Bộ quét
+ * đọc ngoặc theo đúng độ sâu nên `\operatorname{a{<img>}}` cũng không lọt.
+ *
+ * @param {unknown} input
+ * @param {number} [maxLength]
+ * @returns {string}
+ */
+export function sanitizeLatex(input, maxLength = 500) {
+  const src = String(input ?? '')
+    .slice(0, maxLength)
+    .replace(/[\u0000-\u001F\u007F]/g, '');
+
+  let out = '';
+  let i = 0;
+
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch !== '\\') { out += ch; i++; continue; }
+
+    const match = /^\\([a-zA-Z]+)/.exec(src.slice(i));
+    if (!match) {
+      // Lệnh một ký tự: chỉ giữ lại những ký tự vô hại.
+      const next = src[i + 1];
+      if (next && '{}|,;:! \\'.includes(next)) out += ch + next;
+      i += 2;
+      continue;
+    }
+
+    const name = match[1];
+    i += match[0].length;
+    const start = skipSpaces(src, i);
+    const hasGroup = src[start] === '{';
+
+    if (!ALLOWED_COMMANDS.has(name)) {
+      // Bỏ luôn cả đối số của lệnh lạ. Nếu chỉ bỏ tên lệnh thì phần thân vẫn
+      // nằm lại trong chuỗi: `\text{<img onerror=...>}` sẽ còn `{<img ...>}`.
+      if (hasGroup) i = readGroup(src, start).next;
+      continue;
+    }
+
+    out += match[0];
+
+    if (VERBATIM_COMMANDS.has(name) && hasGroup) {
+      const group = readGroup(src, start);
+      out += `{${group.body.replace(/[^a-zA-Z0-9 ]/g, '')}}`;
+      i = group.next;
+    }
+  }
+
+  return out;
+}
+
 /**
  * Chuyển một chuỗi LaTeX sang trung tố.
  * @param {string} latex

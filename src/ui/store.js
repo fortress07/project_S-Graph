@@ -6,6 +6,8 @@
  * làm dở.
  */
 
+import { sanitizeLatex } from '../core/latex.js';
+
 const STORAGE_KEY = 's-graph:session:v2';
 
 /** @typedef {{functions: Array<{latex: string, color: string, hidden: boolean}>, view: object}} Session */
@@ -68,8 +70,26 @@ function decodeState(encoded) {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
-/** Chỉ nhận lại đúng những trường mong đợi, tránh dữ liệu hỏng làm sập ứng dụng. */
-function sanitize(data) {
+/**
+ * Chỉ chấp nhận màu ở dạng mã hex.
+ *
+ * Trước đây chỉ kiểm tra `typeof === 'string'`, nên một liên kết chia sẻ có thể
+ * đặt màu thành `url("http://kẻ-tấn-công/beacon.png")`. Chuỗi này đi thẳng vào
+ * `style.background`, khiến trình duyệt nạn nhân gửi yêu cầu tới máy chủ lạ và
+ * làm lộ địa chỉ IP cùng User-Agent ngay khi mở liên kết.
+ */
+const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+/** Giới hạn khung nhìn để dữ liệu ngoài không đẩy được vào vùng số vô lý. */
+const MAX_CENTER = 1e12;
+const MIN_SCALE = 1e-9;
+const MAX_SCALE = 1e12;
+
+/**
+ * Chỉ nhận lại đúng những trường mong đợi, tránh dữ liệu hỏng làm sập ứng dụng.
+ * Xuất ra ngoài để bộ kiểm thử gọi trực tiếp được mà không cần tới trình duyệt.
+ */
+export function sanitize(data) {
   if (!data || typeof data !== 'object') return null;
   const functions = Array.isArray(data.functions) ? data.functions : [];
   return {
@@ -77,10 +97,27 @@ function sanitize(data) {
       .filter((item) => item && typeof item.latex === 'string')
       .slice(0, 24)
       .map((item) => ({
-        latex: item.latex.slice(0, 500),
-        color: typeof item.color === 'string' ? item.color : undefined,
+        // Chuỗi này sẽ được MathQuill dựng thành DOM — phải lọc tại đây.
+        latex: sanitizeLatex(item.latex),
+        color: HEX_COLOR.test(item.color) ? item.color : undefined,
         hidden: Boolean(item.hidden),
       })),
-    view: data.view && typeof data.view === 'object' ? data.view : null,
+    view: sanitizeView(data.view),
+  };
+}
+
+function sanitizeView(view) {
+  if (!view || typeof view !== 'object') return null;
+  const clamp = (value, limit) =>
+    (Number.isFinite(value) ? Math.max(-limit, Math.min(limit, value)) : undefined);
+
+  const scale = Number.isFinite(view.s)
+    ? Math.max(MIN_SCALE, Math.min(MAX_SCALE, view.s))
+    : undefined;
+
+  return {
+    cx: clamp(view.cx, MAX_CENTER),
+    cy: clamp(view.cy, MAX_CENTER),
+    s: scale > 0 ? scale : undefined,
   };
 }

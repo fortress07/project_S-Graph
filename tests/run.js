@@ -11,6 +11,7 @@ const FILES = [
   ['biểu thức toán học', './expression.test.js'],
   ['đường cong & lấy mẫu', './curve.test.js'],
   ['giao điểm & vùng diện tích', './region.test.js'],
+  ['an toàn dữ liệu đầu vào', './security.test.js'],
 ];
 
 console.log('\n  S-Graph — kiểm thử lõi tính toán');
