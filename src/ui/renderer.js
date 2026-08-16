@@ -8,6 +8,27 @@
 
 import { niceStep, formatTick } from './view.js';
 
+/**
+ * Sinh vị trí các vạch chia trên một trục.
+ *
+ * Có hai chốt chặn quan trọng. Khi tâm nhìn ở rất xa gốc toạ độ, bước chia có
+ * thể nhỏ hơn khoảng cách giữa hai số thực liền nhau, làm `v + size === v` và
+ * vòng lặp chạy mãi không tiến — đủ để treo cứng cả thẻ trình duyệt. Chốt thứ
+ * hai giới hạn số vạch phòng khi bước chia quá nhỏ so với bề rộng khung nhìn.
+ */
+function* tickPositions(min, max, size, limit = 4000) {
+  if (!Number.isFinite(size) || size <= 0) return;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+
+  const start = Math.ceil(min / size) * size;
+  let count = 0;
+  for (let v = start; v <= max; v += size) {
+    if (++count > limit) return;
+    if (v + size === v) return;      // hết độ phân giải số thực
+    yield v;
+  }
+}
+
 /** Đọc bảng màu từ biến CSS để canvas luôn khớp với giao diện đang dùng. */
 export function readPalette(element) {
   const style = getComputedStyle(element);
@@ -95,14 +116,12 @@ export class Renderer {
     for (const [size, color] of [[minor, palette.gridMinor], [step, palette.gridMajor]]) {
       ctx.strokeStyle = color;
       ctx.beginPath();
-      const startX = Math.ceil(view.xMin / size) * size;
-      for (let x = startX; x <= view.xMax; x += size) {
+      for (const x of tickPositions(view.xMin, view.xMax, size)) {
         const sx = Math.round(view.screenX(x)) + 0.5;
         ctx.moveTo(sx, 0);
         ctx.lineTo(sx, view.height);
       }
-      const startY = Math.ceil(view.yMin / size) * size;
-      for (let y = startY; y <= view.yMax; y += size) {
+      for (const y of tickPositions(view.yMin, view.yMax, size)) {
         const sy = Math.round(view.screenY(y)) + 0.5;
         ctx.moveTo(0, sy);
         ctx.lineTo(view.width, sy);
@@ -131,8 +150,7 @@ export class Renderer {
     ctx.textBaseline = 'top';
 
     const labelY = clampNumber(axisY + 5, 4, view.height - 16);
-    const startX = Math.ceil(view.xMin / step) * step;
-    for (let x = startX; x <= view.xMax; x += step) {
+    for (const x of tickPositions(view.xMin, view.xMax, step)) {
       if (Math.abs(x) < step * 1e-6) continue;
       ctx.fillText(formatTick(x, step), view.screenX(x), labelY);
     }
@@ -140,8 +158,7 @@ export class Renderer {
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     const labelX = clampNumber(axisX - 7, 26, view.width - 4);
-    const startY = Math.ceil(view.yMin / step) * step;
-    for (let y = startY; y <= view.yMax; y += step) {
+    for (const y of tickPositions(view.yMin, view.yMax, step)) {
       if (Math.abs(y) < step * 1e-6) continue;
       ctx.fillText(formatTick(y, step), labelX, view.screenY(y));
     }

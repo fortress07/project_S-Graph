@@ -2,6 +2,15 @@
 <html lang="vi" data-theme="dark">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'self' https://cdnjs.cloudflare.com;
+  style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;
+  font-src https://cdnjs.cloudflare.com;
+  img-src 'self' data:;
+  connect-src 'none';
+  base-uri 'none';
+  form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="S-Graph — vẽ đồ thị hàm số và tính diện tích hình phẳng bằng cách chọn điểm trực tiếp trên đồ thị.">
 <meta name="color-scheme" content="dark light">
@@ -178,15 +187,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.min.js"
         integrity="sha384-/RBk1jltzHKz5l1cUO7JrI/xiKAtaZjvvBvu1/wSkohgWoJ2toB+6IRzMvemWy+f" crossorigin="anonymous"></script>
 <script type="module" src="src/main.js"></script>
-<script>
-  // Mở bằng file:// thì ES module bị chặn và trang sẽ trắng — báo cho người dùng biết.
-  setTimeout(function () {
-    if (!window.__S_GRAPH_READY__) {
-      var loader = document.getElementById('app-loader');
-      if (loader) loader.remove();
-      document.getElementById('module-error').hidden = false;
-    }
-  }, 2500);
-</script>
+<script src="src/bootstrap-check.js"></script>
 </body>
 </html>
