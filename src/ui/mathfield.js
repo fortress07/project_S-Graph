@@ -7,6 +7,8 @@
  * vẫn dùng được đầy đủ thay vì hỏng hoàn toàn.
  */
 
+import { sanitizeLatex } from '../core/latex.js';
+
 let mathQuillInterface = null;
 
 /** @returns {boolean} MathQuill có sẵn sàng không. */
@@ -64,6 +66,19 @@ class MathQuillField {
 
     host.addEventListener('focusin', () => this.handlers.onFocus?.(this));
     host.addEventListener('focusout', () => this.handlers.onBlur?.(this));
+
+    // Dán văn bản: MathQuill mặc định coi toàn bộ chuỗi dán là lệnh LaTeX và
+    // dựng thẳng lên DOM (`\text{<img src=x onerror=…>}` chạy được). Đây là
+    // nguồn không tin cậy — nạn nhân có thể bị lừa sao chép một "công thức"
+    // độc hại từ trang khác — nên phải đưa qua đúng bộ lọc dùng cho liên kết
+    // chia sẻ. Bắt sự kiện ngay trên textarea ẩn và chặn nó lan lên handler
+    // mặc định của MathQuill ở phần tử cha.
+    host.querySelector('textarea')?.addEventListener('paste', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const text = event.clipboardData?.getData('text/plain') ?? '';
+      if (text) this.write(sanitizeLatex(text));
+    }, { capture: true });
   }
 
   latex(value) {

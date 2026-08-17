@@ -31,9 +31,23 @@ const MIME_TYPES = {
 
 const server = createServer(async (request, response) => {
   try {
+    // Chống DNS rebinding: tên miền của kẻ tấn công trỏ về 127.0.0.1 sẽ mang
+    // Origin của chính tên miền đó, cho phép đọc mọi tệp trong dự án từ cùng
+    // nguồn. Chỉ nhận tên máy cục bộ hoặc địa chỉ IP trực tiếp.
+    if (!isLocalHost(request.headers.host)) {
+      response.writeHead(403).end('403 Forbidden');
+      return;
+    }
+
     const url = new URL(request.url, `http://${request.headers.host}`);
     let pathname = decodeURIComponent(url.pathname);
     if (pathname.endsWith('/')) pathname += 'index.html';
+
+    // Không phục vụ tệp ẩn (.git, .gitignore, .env…) — chúng nằm ngay gốc dự án.
+    if (pathname.split(/[\\/]/).some((part) => part.startsWith('.'))) {
+      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('404 Not Found');
+      return;
+    }
 
     // Chặn truy cập ra ngoài thư mục dự án.
     const target = resolve(join(ROOT, normalize(pathname)));
@@ -49,13 +63,22 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, {
       'Content-Type': MIME_TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream',
       'Cache-Control': 'no-cache',
+      'X-Content-Type-Options': 'nosniff',
     });
     response.end(body);
   } catch {
-    response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-    response.end('404 Not Found');
+    response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('404 Not Found');
   }
 });
+
+/** Tên máy là "localhost" hoặc địa chỉ IP — những dạng không thể bị DNS rebinding. */
+function isLocalHost(hostHeader) {
+  if (typeof hostHeader !== 'string' || !hostHeader) return false;
+  const host = hostHeader.startsWith('[')
+    ? hostHeader.slice(0, hostHeader.indexOf(']') + 1)
+    : hostHeader.split(':')[0];
+  return host === 'localhost' || /^[0-9.]+$/.test(host) || /^\[[0-9a-f:]+\]$/i.test(host);
+}
 
 server.listen(PORT, () => {
   console.log(`\n  S-Graph đang chạy tại  http://localhost:${PORT}\n  Dừng bằng Ctrl + C\n`);

