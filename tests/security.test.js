@@ -6,6 +6,8 @@
  * Mọi dữ liệu đi qua `sanitize()` đều phải coi là không đáng tin.
  */
 
+import { analyze } from '../src/core/analyze.js';
+import { ImplicitCurve, IMPLICIT_CELL_BUDGET } from '../src/core/curve.js';
 import { sanitizeLatex } from '../src/core/latex.js';
 import { sanitize } from '../src/ui/store.js';
 import { test, equal, ok } from './harness.js';
@@ -154,6 +156,69 @@ test('bỏ qua khung nhìn có giá trị không phải số', () => {
   const out = sanitize({ functions: [], view: { cx: 'x', cy: null, s: NaN } });
   equal(out.view.cx, undefined, 'cx');
   equal(out.view.s, undefined, 's');
+});
+
+/* ------------------------------------------------------------------ */
+/* Treo trình duyệt bằng khối lượng tính toán                          */
+/* ------------------------------------------------------------------ */
+
+test('chặn biểu thức phức tạp quá mức', () => {
+  // Bộ vẽ gọi hàm đã biên dịch hàng chục nghìn lần *mỗi khung hình*, nên chi
+  // phí một lần lấy mẫu phải có trần. Chuỗi luỹ thừa `x^x^x^…` nhồi được một
+  // nút chỉ với hai ký tự, nên 500 ký tự mà liên kết chia sẻ cho phép là thừa
+  // sức dựng cây vài trăm nút.
+  const bomb = 'y=' + 'x^'.repeat(150) + 'x';
+  const result = analyze(sanitizeLatex(bomb));
+  ok(result.error, 'phải báo lỗi thay vì biên dịch');
+  ok(/quá phức tạp/.test(result.error), `thông báo: ${result.error}`);
+  equal(result.curve, null, 'không dựng đường cong');
+});
+
+test('vẫn nhận công thức phổ thông rậm rạp nhất', () => {
+  // Trần phải rộng hơn hẳn mọi thứ người học có thể gõ ra (bài này 79 nút).
+  const dense =
+    'y=\\frac{x^5-3x^4+2x^3-7x^2+11x-13}{x^4+2x^3-5x^2+x-9}' +
+    '+\\sqrt[3]{x^2-4}-\\ln(x^2+1)+\\sin(3x)\\cos(2x)\\tan(x/2)';
+  const result = analyze(dense);
+  equal(result.error, null, `không được từ chối: ${result.error}`);
+  ok(result.curve, 'phải dựng được đường cong');
+});
+
+test('ngân sách lưới chặn chi phí lấy mẫu của đường cong ẩn', () => {
+  // `sin(60x)·cos(60y) = 0` có tập nghiệm dày đặc: gần như ô lưới nào cũng có
+  // giao, nên số lần chiếu Newton — phần đắt nhất — tăng theo bình phương độ
+  // mịn. Một liên kết chia sẻ cài được 24 đường như vậy.
+  const view = { xMin: -8.4, xMax: 8.4, yMin: -6, yMax: 6, width: 980, height: 700 };
+  const evaluations = (cellBudget) => {
+    let calls = 0;
+    const curve = new ImplicitCurve({
+      F: (x, y) => { calls++; return Math.sin(60 * x) * Math.cos(60 * y); },
+      latex: 'sin(60x)cos(60y)=0',
+      cellBudget,
+    });
+    curve.computeBranches(view, {});
+    return calls;
+  };
+
+  const shared = evaluations(IMPLICIT_CELL_BUDGET / 24);
+  const unbounded = evaluations(Infinity);
+
+  ok(shared * 4 < unbounded,
+     `ngân sách phải cắt ít nhất 4 lần: ${shared} so với ${unbounded}`);
+  ok(shared * 24 < 1e6,
+     `24 đường cong không được vượt 1 triệu lần gọi: ${shared * 24}`);
+});
+
+test('cảnh bình thường không bị giảm độ mịn', () => {
+  // Ngân sách chia cho vài đường cong vẫn dư để giữ độ mịn tối đa — chỉ những
+  // cảnh dày đặc bất thường mới bị hạ xuống.
+  const view = { xMin: -8.4, xMax: 8.4, yMin: -6, yMax: 6, width: 980, height: 700 };
+  const points = (cellBudget) => {
+    const { curve } = analyze('x^2+y^2=25');
+    curve.cellBudget = cellBudget;
+    return curve.branches(view).reduce((sum, b) => sum + b.pts.length, 0);
+  };
+  equal(points(IMPLICIT_CELL_BUDGET / 3), points(Infinity), 'đường tròn với 3 đường ẩn');
 });
 
 /* ------------------------------------------------------------------ */

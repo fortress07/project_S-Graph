@@ -7,7 +7,18 @@
  */
 
 import { FUNCTIONS, CONSTANTS, pow } from './mathlib.js';
-import { ParseError, collectVariables } from './parser.js';
+import { ParseError, collectVariables, walk } from './parser.js';
+
+/**
+ * Trần độ phức tạp của một biểu thức.
+ *
+ * Mỗi nút AST trở thành một lời gọi hàm, mà bộ vẽ gọi hàm đã biên dịch hàng
+ * chục nghìn lần cho *mỗi* khung hình. Không có trần này thì một biểu thức lồng
+ * sâu đến từ liên kết chia sẻ đẩy chi phí của một lần lấy mẫu lên tuỳ ý, và
+ * nhân với số ô lưới là đủ khoá cứng luồng chính. Công thức phổ thông rậm rạp
+ * nhất cũng chỉ quanh 30–60 nút, nên 200 là rất rộng rãi.
+ */
+const MAX_NODES = 200;
 
 /**
  * @param {object} ast Cây cú pháp
@@ -15,6 +26,11 @@ import { ParseError, collectVariables } from './parser.js';
  * @returns {(scope: object) => number}
  */
 export function compile(ast, allowedVars = ['x', 'y', 't', 'theta', 'r']) {
+  const size = countNodes(ast);
+  if (size > MAX_NODES) {
+    throw new ParseError(`Biểu thức quá phức tạp (${size} nút, tối đa ${MAX_NODES}).`);
+  }
+
   const allowed = new Set(allowedVars);
   for (const name of collectVariables(ast)) {
     if (!allowed.has(name)) {
@@ -24,6 +40,12 @@ export function compile(ast, allowedVars = ['x', 'y', 't', 'theta', 'r']) {
     }
   }
   return build(ast);
+}
+
+function countNodes(ast) {
+  let total = 0;
+  walk(ast, () => { total++; });
+  return total;
 }
 
 function build(node) {

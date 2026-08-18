@@ -7,7 +7,7 @@
  */
 
 import { analyze } from './core/analyze.js';
-import { ExplicitCurve, InverseCurve } from './core/curve.js';
+import { ExplicitCurve, InverseCurve, IMPLICIT_CELL_BUDGET } from './core/curve.js';
 import { findFeaturePoints, nearestCurvePoint } from './core/features.js';
 import { analyzeRegion } from './core/region.js';
 
@@ -253,12 +253,23 @@ class App {
 
   /** Danh sách đường cong đang hiển thị (không gồm hai trục). */
   visibleCurves() {
-    return this.items
+    const curves = this.items
       .filter((item) => !item.hidden && item.analysis?.curve)
       .map((item) => {
         item.analysis.curve.color = item.color;
         return item.analysis.curve;
       });
+
+    // Đường cong ẩn lấy mẫu bằng marching squares — tốn hơn hẳn các loại khác.
+    // Chia ngân sách ô lưới cho những đường đang hiển thị để tổng chi phí một
+    // khung hình không tăng theo số hàm số. Cần đặt ở đây, nơi biết cả cảnh,
+    // và phải đặt trước mọi bên dùng (bộ vẽ, bộ tìm điểm đặc biệt, bộ tính
+    // diện tích) để cả ba dùng chung một bản lấy mẫu đã nhớ đệm.
+    const implicit = curves.filter((curve) => curve.kind === 'implicit');
+    const budget = implicit.length ? IMPLICIT_CELL_BUDGET / implicit.length : Infinity;
+    for (const curve of implicit) curve.cellBudget = budget;
+
+    return curves;
   }
 
   /** Đường cong dùng khi suy luận vùng — có thêm hai trục toạ độ. */

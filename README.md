@@ -107,6 +107,9 @@ Liên kết chia sẻ mang theo trạng thái do người khác tạo, nên đư
 * LaTeX được lọc theo danh sách lệnh cho phép trước khi giao cho MathQuill dựng DOM.
 * Màu chỉ nhận mã hex, chặn việc nhét `url(...)` để dò địa chỉ IP người mở.
 * Khung nhìn bị kẹp về khoảng an toàn, tránh làm treo thẻ trình duyệt.
+* Khối lượng tính toán mỗi khung hình có trần cố định: biểu thức có trần số nút,
+  và các đường cong ẩn chia nhau một ngân sách ô lưới chung. Nếu không, một liên
+  kết chứa 24 hàm nặng đủ khoá cứng luồng chính hàng phút mỗi lần vẽ lại.
 * Trang khai báo Content-Security-Policy nghiêm ngặt, chặn cả script nội tuyến lẫn kết nối ra ngoài.
 
 ## Giấy phép
