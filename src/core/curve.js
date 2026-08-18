@@ -20,6 +20,21 @@ import { derivative, integrate, projectOntoImplicit, clamp } from './numeric.js'
 /** Ngắt nét vẽ khi bước nhảy vượt quá ngần này lần chiều cao khung nhìn. */
 const JUMP_FACTOR = 3;
 
+/**
+ * Tổng số ô lưới dành cho *tất cả* đường cong ẩn đang hiển thị trong một khung
+ * hình. Chia đều cho từng đường: một vài đường thì vẫn đủ độ mịn tối đa, nhiều
+ * đường thì mỗi đường thô đi, nhưng chi phí cả khung hình không đổi.
+ *
+ * Đây là chốt chặn chống liên kết chia sẻ độc hại: dữ liệu ngoài cài được tới
+ * 24 hàm số, mỗi hàm là một đường cong ẩn với tập nghiệm dày đặc, và trước đây
+ * mỗi đường đều lấy mẫu ở độ mịn tối đa nên tổng chi phí tăng tuyến tính không
+ * giới hạn.
+ */
+export const IMPLICIT_CELL_BUDGET = 150000;
+
+/** Không bao giờ thô hơn mức này, kể cả khi có rất nhiều đường cong ẩn. */
+const MIN_GRID = 88;
+
 let curveIdCounter = 0;
 
 /* ================================================================== */
@@ -42,6 +57,15 @@ export class Curve {
     this.domain = spec.domain ?? null;
     this.isAxis = Boolean(spec.isAxis);
     this.hasResidual = true;
+    /**
+     * Phần ngân sách ô lưới được cấp cho đường này (xem `IMPLICIT_CELL_BUDGET`).
+     *
+     * Mặc định là *trọn* ngân sách — đủ cho độ mịn tối đa, nên một đường cong
+     * đứng riêng không hề thay đổi. Bên gọi biết cả cảnh (`App.visibleCurves`)
+     * sẽ chia nhỏ lại. Mặc định như vậy để lỡ có nơi nào quên chia thì vẫn còn
+     * trần, thay vì rơi về trạng thái không giới hạn.
+     */
+    this.cellBudget = spec.cellBudget ?? IMPLICIT_CELL_BUDGET;
     this._cache = null;
   }
 
@@ -53,7 +77,7 @@ export class Curve {
 
   /** Lấy mẫu đường cong, có nhớ đệm theo khung nhìn. */
   branches(view, options = {}) {
-    const key = `${view.xMin},${view.xMax},${view.yMin},${view.yMax},${view.width},${view.height},${options.quality ?? 1}`;
+    const key = `${view.xMin},${view.xMax},${view.yMin},${view.yMax},${view.width},${view.height},${options.quality ?? 1},${this.cellBudget}`;
     if (this._cache && this._cache.key === key) return this._cache.value;
     const value = this.computeBranches(view, options);
     this._cache = { key, value };
@@ -370,10 +394,10 @@ export class ImplicitCurve extends Curve {
   }
 
   computeBranches(view, options) {
-    const resolution = options.quality === 2 ? 420 : 260;
+    const base = options.quality === 2 ? 420 : 260;
     const branches = marchingSquares(
       (x, y) => this.residual(x, y),
-      view, resolution
+      view, gridSizeFor(base, view, this.cellBudget)
     );
     for (const branch of branches) {
       branch.ts = branch.pts.map((_, i) => i);
@@ -471,6 +495,22 @@ function sampleCount(view, options = {}) {
 }
 
 /**
+ * Độ mịn lưới lớn nhất mà vẫn nằm trong phần ngân sách được cấp.
+ *
+ * Lưới có `n × n·tỉ_lệ` ô, nên `n = √(ngân sách / tỉ_lệ)`. Không cấp ngân sách
+ * thì giữ nguyên độ mịn tối đa.
+ */
+function gridSizeFor(base, view, cellBudget) {
+  if (!Number.isFinite(cellBudget) || cellBudget <= 0) return base;
+  const spanX = Math.abs(view.xMax - view.xMin);
+  const spanY = Math.abs(view.yMax - view.yMin);
+  const aspect = spanX > 0 ? spanY / spanX : 1;
+  if (!Number.isFinite(aspect) || aspect <= 0) return base;
+  const fitted = Math.floor(Math.sqrt(cellBudget / aspect));
+  return Math.max(MIN_GRID, Math.min(base, fitted));
+}
+
+/**
  * Gom các mẫu liên tiếp thành nhánh liên tục, cắt tại điểm không xác định
  * hoặc tại bước nhảy quá lớn (tiệm cận đứng).
  */
@@ -556,6 +596,18 @@ export function marchingSquares(F, view, resolution) {
   const pointOfEdge = new Map();
   const links = new Map();
 
+  /**
+   * Trần số điểm được chiếu Newton. Mỗi lần chiếu tốn khoảng 20 lời gọi `F`,
+   * nên đây mới là phần đắt nhất của marching squares — không phải bản thân
+   * lưới. Đường mức bình thường (tròn, elip, parabol) chỉ có vài trăm điểm:
+   * một đường tròn phủ kín khung nhìn cho khoảng `π·nx` điểm, nên `8·nx` là
+   * hơn gấp đôi mức cần. Tập nghiệm dày đặc kiểu `sin(60x)·cos(60y)=0` thì có
+   * hàng chục nghìn điểm — quá trần thì dùng thẳng điểm nội suy tuyến tính,
+   * sai lệch dưới một điểm ảnh mà chi phí không còn tăng nữa.
+   */
+  const maxProjections = 8 * nx;
+  let projections = 0;
+
   const edgeIdH = (i, j) => (j * (nx + 1) + i) * 2;       // cạnh ngang (i,j)–(i+1,j)
   const edgeIdV = (i, j) => (j * (nx + 1) + i) * 2 + 1;   // cạnh dọc  (i,j)–(i,j+1)
 
@@ -564,7 +616,9 @@ export function marchingSquares(F, view, resolution) {
     const ratio = v0 / (v0 - v1);
     const x = x0 + (x1 - x0) * ratio;
     const y = y0 + (y1 - y0) * ratio;
-    pointOfEdge.set(id, projectOntoImplicit(F, x, y, 4));
+    pointOfEdge.set(id, projections++ < maxProjections
+      ? projectOntoImplicit(F, x, y, 4)
+      : [x, y]);
     return id;
   };
 

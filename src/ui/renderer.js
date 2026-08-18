@@ -29,6 +29,22 @@ function* tickPositions(min, max, size, limit = 4000) {
   }
 }
 
+/**
+ * Cạnh ô khi tô miền nghiệm, to dần theo số miền đang hiển thị.
+ *
+ * Mỗi ô là một lần gọi hàm đã biên dịch, và toàn bộ việc này chạy lại trên
+ * luồng chính ở *mỗi* khung hình. Giữ tổng số phép thử quanh `TEST_BUDGET` để
+ * một liên kết chia sẻ chứa hàng chục bất phương trình không khoá cứng trang.
+ * Một hoặc hai miền — trường hợp thường gặp — vẫn giữ nguyên độ mịn 5px.
+ */
+const TEST_BUDGET = 60000;
+
+function inequalityCell(count, view, base = 5) {
+  if (count <= 1) return base;
+  const needed = Math.sqrt((view.width * view.height * count) / TEST_BUDGET);
+  return Math.max(base, Math.ceil(needed));
+}
+
 /** Đọc bảng màu từ biến CSS để canvas luôn khớp với giao diện đang dùng. */
 export function readPalette(element) {
   const style = getComputedStyle(element);
@@ -93,7 +109,9 @@ export class Renderer {
     ctx.fillRect(0, 0, view.width, view.height);
 
     this.drawGrid();
-    for (const item of scene.inequalities ?? []) this.drawInequality(item);
+    const inequalities = scene.inequalities ?? [];
+    const cell = inequalityCell(inequalities.length, view);
+    for (const item of inequalities) this.drawInequality(item, cell);
     if (scene.region) this.drawRegion(scene.region);
     this.drawAxes();
     for (const curve of scene.curves ?? []) this.drawCurve(curve);
@@ -228,9 +246,8 @@ export class Renderer {
    * đúng cho mọi bất phương trình, kể cả `x^2+y^2<9`, mà không cần biết trước
    * hình dạng miền.
    */
-  drawInequality({ test, color, domain }) {
+  drawInequality({ test, color, domain }, cell = 5) {
     const { ctx, view } = this;
-    const cell = 5;
     ctx.save();
     ctx.fillStyle = color;
     ctx.globalAlpha = 0.16;
